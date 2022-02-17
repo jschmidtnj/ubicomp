@@ -142,10 +142,10 @@ bool check_turn(void *)
   {
     if (!left_turn)
     {
-      left_turn = true;
+      // left_turn = true;
       timer.at(millis() + DELTA_TURN, [](void *) -> bool
                {
-      left_turn = false;
+      // left_turn = false;
       return false; });
     }
   }
@@ -157,10 +157,10 @@ bool check_turn(void *)
   {
     if (!right_turn)
     {
-      right_turn = true;
+      // right_turn = true;
       timer.at(millis() + DELTA_TURN, [](void *) -> bool
                {
-      right_turn = false;
+      // right_turn = false;
       return false; });
     }
   }
@@ -217,6 +217,23 @@ void setup()
   setup_carrier();
   delay(5000);
   setup_steps_display();
+  const int time = 3000;
+  timer.at(millis() + time, [](void *) -> bool
+           {
+    left_turn = true;
+    right_turn - false;
+
+    timer.at(millis() + time, [](void *) -> bool {
+      left_turn = false;
+      right_turn = true;
+      timer.at(millis() + time, [](void *) -> bool {
+        left_turn = false;
+        right_turn = false;
+        return false;
+      });
+      return false;
+    });
+    return false; });
   timer.every(500, show_steps);
   timer.every(50, check_step);
 
