@@ -280,6 +280,7 @@ void sensorsPage()
     {
       shakeCheckCompleted = true;
     }
+    // carrier.IMUmodule.
   }
 
   // provide a feedback on the display when movement is successfully detected

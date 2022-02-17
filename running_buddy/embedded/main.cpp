@@ -26,7 +26,6 @@ void setup_carrier()
     }
   }
   Serial.println("done with setup");
-  delay(5000);
 }
 
 void setup()
@@ -37,6 +36,7 @@ void setup()
 
 void loop()
 {
+  delay(5000);
   Serial.println("loop");
   float a_x, a_y, a_z, g_x, g_y, g_z;
   while (!carrier.IMUmodule.accelerationAvailable()) {
