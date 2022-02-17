@@ -6,3 +6,6 @@ week1: week1.md
 
 week2: week2.md
 	pandoc week2.md --pdf-engine=xelatex -o week2.pdf
+
+week2.zip: week2 code/week2.cpp code/week2_carriers.h
+	zip -r week2.zip week2.pdf code/week2.cpp code/week2_carriers.h
