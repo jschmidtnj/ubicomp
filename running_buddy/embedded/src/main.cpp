@@ -128,14 +128,30 @@ bool data_filter(std::deque<double> &hist_data, const size_t &queue_size, const 
 }
 
 File file;
+const String file_name = "data.csv";
+
+void log_data_sd(String data)
+{
+  file = SD.open(file_name.c_str(), FILE_WRITE);
+
+  if (file)
+  {
+    Serial.println(data);
+    file.println(data);
+    file.close();
+  }
+  else
+  {
+    Serial.println(data);
+  }
+}
 
 void log_data(std::vector<float> &data)
 {
   std::ostringstream oss;
+  oss << "gyro,";
   std::copy(data.begin(), data.end(), std::ostream_iterator<int>(oss, ", "));
-  file.write("gyro,");
-  file.write(oss.str().c_str() + '\n');
-  Serial.println(oss.str().c_str());
+  log_data_sd(oss.str().c_str());
 }
 
 uint64_t steps = 0;
@@ -153,6 +169,9 @@ bool handle_step(void *)
                   std::numeric_limits<double>::max(), STEP_THRESHOLD))
   {
     steps++;
+    ss << "step," << steps;
+    log_data_sd(ss.str().c_str());
+    clear_ss();
   }
 
   return true;
@@ -253,7 +272,6 @@ void toggle_display(bool right_direction = true)
 {
   curr_mode_idx = (curr_mode_idx + (right_direction ? 1 : -1)) % modes.size();
   mode_type curr_mode = modes[curr_mode_idx];
-  Serial.println("toggle display");
   uint32_t led_color = 0;
   switch (curr_mode)
   {
@@ -280,9 +298,9 @@ void setup_buzzer()
 
 void setup_sd()
 {
-  const String file_name = "data.csv";
-  SD.remove((char *)file_name.c_str());
-  file = SD.open(file_name.c_str(), FILE_WRITE);
+  // SD.remove((char *)file_name.c_str());
+  // file = SD.open(file_name.c_str(), FILE_WRITE);
+  // file.close();
 }
 
 void setup()
@@ -309,27 +327,23 @@ void loop()
   if (carrier.Buttons.onTouchDown(TOUCH0))
   {
     // night
-    Serial.println("night mode");
-    file.write("night_mode,\n");
+    log_data_sd("night_mode,");
     handle_color(CRGB::Aqua, 0);
   }
   if (carrier.Buttons.onTouchDown(TOUCH4))
   {
     // day
-    Serial.println("day mode");
-    file.write("day_mode,\n");
+    log_data_sd("day_mode,");
     handle_color(CRGB::White, 4);
   }
   if (carrier.Buttons.onTouchDown(TOUCH1))
   {
-    Serial.println("toggle display left");
-    file.write("toggle_display_left,\n");
+    log_data_sd("toggle_display_left,");
     toggle_display(true);
   }
   if (carrier.Buttons.onTouchDown(TOUCH3))
   {
-    Serial.println("toggle display right");
-    file.write("toggle_display_right,\n");
+    log_data_sd("toggle_display_right,");
     toggle_display(false);
   }
 }
