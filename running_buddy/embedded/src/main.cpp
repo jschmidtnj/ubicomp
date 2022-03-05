@@ -1,14 +1,18 @@
 #include <Arduino.h>
 #include <Arduino_MKRIoTCarrier.h>
+#include <FastLED.h>
 #include <sstream>
 #include <arduino-timer.h>
 #include <math.h>
 #include <deque>
 #include <numeric>
+#include <iterator>
 #include <limits>
 #include <vector>
 
 #include "carriers.h"
+
+#define NUM_LEDS 16
 
 #define BAUD_RATE 115200
 
@@ -24,6 +28,14 @@
 #define LEFT_LED 3
 #define RIGHT_LED 1
 
+#define LED_PIN 21
+#define LED_TYPE WS2811
+#define COLOR_ORDER GRB
+
+CRGBArray<NUM_LEDS> leds;
+
+uint8_t brightness = 128;
+
 MKRIoTCarrier carrier;
 
 std::ostringstream ss;
@@ -34,6 +46,17 @@ void clear_ss()
 {
   ss.str("");
   ss.clear();
+}
+
+void update_brightness()
+{
+  FastLED.setBrightness(brightness);
+}
+
+void setup_LEDs()
+{
+  FastLED.addLeds<LED_TYPE, LED_PIN, COLOR_ORDER>(leds, NUM_LEDS).setCorrection(TypicalLEDStrip);
+  update_brightness();
 }
 
 void setup_carrier()
@@ -58,9 +81,9 @@ void setup_carrier()
 
   // show loading screen
   carrier.display.fillScreen(0x0000);
-  carrier.display.setRotation(0);
+  carrier.display.setRotation(2); // rotate 180 degrees
   carrier.display.setTextWrap(true);
-  carrier.display.drawBitmap(60, 30, hardware_logo, 120, 121, 0xFFFF);
+  carrier.display.drawBitmap(60, 30, loading_logo, 120, 121, 0xFFFF);
   carrier.display.setTextColor(0xFFFF);
   carrier.display.setTextSize(3);
   carrier.display.setCursor(35, 160);
@@ -104,14 +127,26 @@ bool data_filter(std::deque<double> &hist_data, const size_t &queue_size, const 
   return true;
 }
 
+File file;
+
+void log_data(std::vector<float> &data)
+{
+  std::ostringstream oss;
+  std::copy(data.begin(), data.end(), std::ostream_iterator<int>(oss, ", "));
+  file.write("gyro,");
+  file.write(oss.str().c_str() + '\n');
+  Serial.println(oss.str().c_str());
+}
+
 uint64_t steps = 0;
 uint32_t last_step = millis();
 std::deque<double> hist_accel;
 
-bool check_step(void *)
+bool handle_step(void *)
 {
   std::vector<float> data(3, 0);
   carrier.IMUmodule.readAcceleration(data[0], data[1], data[2]);
+  log_data(data);
 
   if (data_filter(hist_accel, ACCEL_QUEUE_SIZE, DELTA_STEP_MS,
                   data, last_step, true,
@@ -123,83 +158,77 @@ bool check_step(void *)
   return true;
 }
 
-bool left_turn = false;
-uint32_t last_left_turn = millis();
-std::deque<double> hist_left_turn;
-
-bool right_turn = false;
-uint32_t last_right_turn = millis();
-std::deque<double> hist_right_turn;
-
-bool check_turn(void *)
-{
-  std::vector<float> data(3, 0);
-  carrier.IMUmodule.readAcceleration(data[0], data[1], data[2]);
-
-  std::vector<float> left_turn_data{data[2]};
-  if (data_filter(hist_left_turn, TURN_QUEUE_SIZE, DELTA_TURN,
-                  left_turn_data, last_left_turn, false, LEFT_TURN_THRESHOLD))
-  {
-    if (!left_turn)
-    {
-      // left_turn = true;
-      timer.at(millis() + DELTA_TURN, [](void *) -> bool
-               {
-      // left_turn = false;
-      return false; });
-    }
-  }
-
-  std::vector<float> right_turn_data{data[2]};
-  if (data_filter(hist_right_turn, TURN_QUEUE_SIZE, DELTA_TURN,
-                  right_turn_data, last_right_turn, false,
-                  std::numeric_limits<double>::max(), RIGHT_TURN_THRESHOLD))
-  {
-    if (!right_turn)
-    {
-      // right_turn = true;
-      timer.at(millis() + DELTA_TURN, [](void *) -> bool
-               {
-      // right_turn = false;
-      return false; });
-    }
-  }
-
-  return true;
-}
-
-bool show_turn(void *)
-{
-  // red and green are flipped for some reason
-  const uint32_t left_color = carrier.leds.Color(255, 0, 0);
-  const uint32_t right_color = carrier.leds.Color(0, 255, 0);
-  const uint32_t off_color = carrier.leds.Color(0, 0, 0);
-
-  carrier.leds.setPixelColor(LEFT_LED, left_turn ? left_color : off_color);
-  carrier.leds.setPixelColor(RIGHT_LED, right_turn ? right_color : off_color);
-  carrier.leds.show();
-
-  return true;
-}
-
-const int steps_line = 160;
-
 const int text_size = 3;
 const int text_size_x = text_size * 6;
 const int text_size_y = text_size * 8;
 
-bool show_steps(void *)
+void show_steps()
 {
-  const int start_steps = 80;
+  const int start = 80;
+  const int line = 160;
   const int message_space = 15;
 
-  carrier.display.setCursor(start_steps, steps_line);
-  carrier.display.fillRect(start_steps, steps_line - 5, message_space * text_size_x, text_size_y + 5, 0x0000);
+  carrier.display.setCursor(start, line);
+  carrier.display.fillRect(start, line - 5, message_space * text_size_x, text_size_y + 5, 0x0000);
   ss << steps << " steps";
-  carrier.display.setCursor(start_steps, steps_line);
+  carrier.display.setCursor(start, line);
   carrier.display.print(ss.str().c_str());
   clear_ss();
+}
+
+void show_temperature()
+{
+  const int start = 80;
+  const int line = 160;
+  const int message_space = 15;
+
+  carrier.display.fillRect(start, line - 5, message_space * text_size_x, text_size_y + 5, 0x0000);
+  float temperature = carrier.Env.readTemperature();
+  carrier.display.setCursor(start, line);
+  carrier.display.print(temperature);
+  carrier.display.print(" C");
+}
+
+enum class mode_type
+{
+  STEPS,
+  TEMPERATURE
+};
+
+std::vector<mode_type> modes = {mode_type::STEPS, mode_type::TEMPERATURE};
+
+size_t curr_mode_idx = modes.size() - 1;
+
+bool handle_display(void *)
+{
+  mode_type curr_mode = modes[curr_mode_idx];
+  switch (curr_mode)
+  {
+  case mode_type::STEPS:
+    show_steps();
+    break;
+  case mode_type::TEMPERATURE:
+    show_temperature();
+    break;
+  default:
+    break;
+  }
   return true;
+}
+
+CRGB off_color = CRGB::Black;
+
+CRGB curr_color = off_color;
+
+void handle_color(CRGB on_color, uint16_t pixel)
+{
+  const uint32_t led_color = curr_color == off_color ? carrier.leds.Color(255, 0, 0) : carrier.leds.Color(0, 0, 0);
+  carrier.leds.setPixelColor(pixel, led_color);
+  carrier.leds.show();
+  curr_color = curr_color == off_color ? on_color : off_color;
+  fill_solid(leds, NUM_LEDS, curr_color);
+  FastLED.show();
+  delay(50);
 }
 
 void setup_steps_display()
@@ -211,37 +240,96 @@ void setup_steps_display()
   carrier.display.drawBitmap(70, 60, steps_logo, 100, 100, 0xF621);
 }
 
+void setup_temperature_display()
+{
+  carrier.display.fillScreen(0x0000);
+  carrier.display.setCursor(54, 40);
+  carrier.display.setTextSize(text_size);
+  carrier.display.print("Temp");
+  carrier.display.drawBitmap(70, 60, temperature_logo, 100, 100, 0xF621);
+}
+
+void toggle_display(bool right_direction = true)
+{
+  curr_mode_idx = (curr_mode_idx + (right_direction ? 1 : -1)) % modes.size();
+  mode_type curr_mode = modes[curr_mode_idx];
+  Serial.println("toggle display");
+  uint32_t led_color = 0;
+  switch (curr_mode)
+  {
+  case mode_type::STEPS:
+    led_color = carrier.leds.Color(0, 64, 0);
+    setup_steps_display();
+    break;
+  case mode_type::TEMPERATURE:
+    led_color = carrier.leds.Color(64, 0, 0);
+    setup_temperature_display();
+  default:
+    break;
+  }
+  carrier.leds.setPixelColor(right_direction ? 1 : 3, led_color);
+  carrier.leds.show();
+  delay(50);
+}
+
+// TODO - use relay to activate buzzer
+void setup_buzzer()
+{
+  carrier.Relay1.close();
+}
+
+void setup_sd()
+{
+  const String file_name = "data.csv";
+  SD.remove((char *)file_name.c_str());
+  file = SD.open(file_name.c_str(), FILE_WRITE);
+}
+
 void setup()
 {
   Serial.begin(BAUD_RATE);
   setup_carrier();
+  setup_LEDs();
+  setup_sd();
+  fill_solid(leds, NUM_LEDS, CRGB::Black);
+  FastLED.show();
+  setup_buzzer();
   delay(5000);
-  setup_steps_display();
-  const int time = 3000;
-  timer.at(millis() + time, [](void *) -> bool
-           {
-    left_turn = true;
-    right_turn - false;
-
-    timer.at(millis() + time, [](void *) -> bool {
-      left_turn = false;
-      right_turn = true;
-      timer.at(millis() + time, [](void *) -> bool {
-        left_turn = false;
-        right_turn = false;
-        return false;
-      });
-      return false;
-    });
-    return false; });
-  timer.every(500, show_steps);
-  timer.every(50, check_step);
-
-  timer.every(500, show_turn);
-  timer.every(DELTA_TURN / 2, check_turn);
+  toggle_display();
+  timer.every(500, handle_display);
+  timer.every(100, handle_step);
 }
 
 void loop()
 {
+  // update loop
+  carrier.Buttons.update();
   timer.tick();
+
+  if (carrier.Buttons.onTouchDown(TOUCH0))
+  {
+    // night
+    Serial.println("night mode");
+    file.write("night_mode,\n");
+    handle_color(CRGB::Aqua, 0);
+  }
+  if (carrier.Buttons.onTouchDown(TOUCH4))
+  {
+    // day
+    Serial.println("day mode");
+    file.write("day_mode,\n");
+    handle_color(CRGB::White, 4);
+  }
+  if (carrier.Buttons.onTouchDown(TOUCH1))
+  {
+    Serial.println("toggle display left");
+    file.write("toggle_display_left,\n");
+    toggle_display(true);
+  }
+  if (carrier.Buttons.onTouchDown(TOUCH3))
+  {
+    Serial.println("toggle display right");
+    file.write("toggle_display_right,\n");
+    toggle_display(false);
+  }
 }
