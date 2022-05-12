@@ -1,0 +1,32 @@
+{
+  "name": "create-user",
+  "version": "0.0.3",
+  "description": "create a user on sign up from cognito trigger",
+  "main": "index.js",
+  "author": "Flex",
+  "license": "CC-BY-NC-ND-4.0",
+  "scripts": {
+    "start": "node ./dist/index.js",
+    "build": "tsc",
+    "build:lambda": "pnpm build && ./bin/sync_lambda.sh",
+    "lint": "TIMING=1 eslint src --fix",
+    "precommit": "./bin/check_changes.sh || pnpm lint",
+    "test": "echo \"Error: no test specified\"",
+    "clean": "rimraf dist && rimraf .turbo",
+    "dev": "tsc -w"
+  },
+  "dependencies": {
+    "@aws-sdk/client-cognito-identity-provider": "^3.67.0",
+    "@project-serum/anchor": "^0.24.2",
+    "functions": "workspace:*",
+    "graphql-tag": "^2.12.6",
+    "log4js": "^6.4.4"
+  },
+  "devDependencies": {
+    "@types/aws-lambda": "^8.10.93",
+    "config": "workspace:*",
+    "rimraf": "^3.0.2",
+    "tsconfig": "workspace:*",
+    "typescript": "^4.6.2"
+  }
+}
